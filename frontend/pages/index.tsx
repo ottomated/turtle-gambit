@@ -107,6 +107,24 @@ export class Turtle extends EventEmitter {
 	async undergoMitosis() {
 		return window.exec<boolean>(this.id, 'undergoMitosis');
 	}
+	async moveItems(slot: number, amount: string) {
+		return window.exec(this.id, 'moveItems', slot, amount);
+	}
+	async craft(amount: string) {
+		return window.exec(this.id, 'craft', amount);
+	}
+	async exec(command: string) {
+		return window.exec<string>(this.id, 'exec', command);
+	}
+	async equip(side: 'left' | 'right') {
+		return window.exec<string>(this.id, 'equip', side);
+	}
+	async mineTunnel(length: number) {
+		return window.exec<string>(this.id, 'mineTunnel', length);
+	}
+	async checkMiningResults() {
+		return window.exec<string>(this.id, 'checkMiningResults');
+	}
 }
 
 export interface World {
@@ -116,7 +134,7 @@ export const TurtleContext = createContext<[number, Dispatch<SetStateAction<numb
 
 const IndexPage = () => {
 	const classes = useStyles();
-	
+
 	const [turtles, setTurtles] = useState<Turtle[]>([]);
 	const [world, setWorld] = useState<World>({});
 	const [turtleId, setTurtleId] = useState<number>(-1);
@@ -131,12 +149,14 @@ const IndexPage = () => {
 
 	}, [setTurtles, setWorld]);
 
-	useEffect(() => {
-		if (turtles.length === 1 || turtles.length > 0 && turtleId === -1)
-			setTurtleId(turtles[0].id);
-	}, [turtles]);
-
 	const selectedTurtle = turtles.find(t => t.id === turtleId);
+	useEffect(() => {
+		if (turtles.length === 1 || turtles.length > 0 && (turtleId === -1 || !selectedTurtle))
+			setTurtleId(turtles[0].id);
+	}, [turtles, turtleId]);
+
+	const [disableEvents, setDisableEvents] = useState(false);
+
 
 	return (
 		<TurtleContext.Provider value={[turtleId, setTurtleId, turtles]}>
@@ -144,13 +164,11 @@ const IndexPage = () => {
 
 				{
 					turtles.map((t) => (
-						<TurtlePage enabled={turtleId === t.id} key={t.id} turtle={t} />
+						<TurtlePage setDisableEvents={setDisableEvents} enabled={turtleId === t.id} key={t.id} turtle={t} />
 					))
 				}
-				{
-					selectedTurtle &&
-					<WorldRenderer className={classes.world} turtle={selectedTurtle} world={world} disableEvents={false} />
-				}
+				<WorldRenderer className={classes.world} turtle={selectedTurtle} world={world} disableEvents={disableEvents} />
+
 			</div>
 		</TurtleContext.Provider>
 	);

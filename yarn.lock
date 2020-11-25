@@ -67,11 +67,6 @@
   dependencies:
     "@types/node" "*"
 
-"@types/random-name@^0.1.0":
-  version "0.1.0"
-  resolved "https://registry.yarnpkg.com/@types/random-name/-/random-name-0.1.0.tgz#cd2a329c15850a067841f38f7939691eeec01bf4"
-  integrity sha512-QA0nl1t7RN1k5YeBH0jxyRD34MDJ9pW+fahEnPhWFNgFhiV5TJ8nm5+pR6NEev7z9SiWhZswnDPb9w0DP7N7bw==
-
 "@types/request@^2.48.2":
   version "2.48.5"
   resolved "https://registry.yarnpkg.com/@types/request/-/request-2.48.5.tgz#019b8536b402069f6d11bee1b2c03e7f232937a0"
@@ -1503,11 +1498,6 @@ qs@~6.5.2:
   version "6.5.2"
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
-
-random-name@^0.1.2:
-  version "0.1.2"
-  resolved "https://registry.yarnpkg.com/random-name/-/random-name-0.1.2.tgz#20a1ad0efce9976764c5dd3c418c7018b57e816d"
-  integrity sha1-IKGtDvzpl2dkxd08QYxwGLV+gW0=
 
 readable-stream@^1.1.8:
   version "1.1.14"

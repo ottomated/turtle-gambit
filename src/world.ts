@@ -8,6 +8,7 @@ export default class World extends EventEmitter {
 		super();
 		this.db = new JsonDB('world.json');
 		if (!this.db.exists('/world')) this.db.push('/world', {});
+		if (!this.db.exists('/nameindex')) this.db.push('/nameindex', 0);
 		this.emit('update', this.getAllBlocks());
 	}
 

@@ -41,6 +41,7 @@ const useStyles = makeStyles(() => ({
 const initialState = {
 	mouseX: null,
 	mouseY: null,
+	slot: 0
 };
 
 interface InventoryProps {
@@ -52,18 +53,41 @@ export default function Inventory({ turtle }: InventoryProps) {
 	const [state, setState] = useState<{
 		mouseX: null | number;
 		mouseY: null | number;
+		slot: number;
 	}>(initialState);
-	const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+
+	const handleClick = (event: React.MouseEvent<HTMLDivElement>, slot: number) => {
 		event.preventDefault();
 		setState({
 			mouseX: event.clientX - 2,
 			mouseY: event.clientY - 4,
+			slot
 		});
 	};
 
-	const handleClose = () => {
+	const handleClose = (amount: 'all' | 'half' | 'one') => {
+		turtle.moveItems(state.slot, amount);
 		setState(initialState);
 	};
+
+	let menuItems = [];
+	if (state.slot === turtle.selectedSlot) {
+		menuItems = [
+			<MenuItem key={3} onClick={() => {
+				turtle.equip('left'); setState({ ...initialState, slot: turtle.selectedSlot });
+			}}>Equip Left</MenuItem>,
+			<MenuItem key={4} onClick={() => {
+				turtle.equip('right'); setState({ ...initialState, slot: turtle.selectedSlot });
+			}}>Equip Right</MenuItem>
+		];
+	} else {
+		menuItems = [
+			<MenuItem key={0} onClick={() => handleClose('all')}>Move All</MenuItem>,
+			<MenuItem key={1} onClick={() => handleClose('half')}>Move Half</MenuItem>,
+			<MenuItem key={2} onClick={() => handleClose('one')}>Move One</MenuItem>
+		];
+	}
+
 	return (
 		<Grid container spacing={1} className={classes.inventory}>
 			<Menu
@@ -77,23 +101,20 @@ export default function Inventory({ turtle }: InventoryProps) {
 						: undefined
 				}
 			>
-				<MenuItem onClick={handleClose}>Copy</MenuItem>
-				<MenuItem onClick={handleClose}>Print</MenuItem>
-				<MenuItem onClick={handleClose}>Highlight</MenuItem>
-				<MenuItem onClick={handleClose}>Email</MenuItem>
+				{menuItems}
 			</Menu>
 			{
 				turtle.inventory.map((item, i) => (
 					<Grid key={i} item xs={3} className={classes.inventoryItem}>
-						<Paper onContextMenu={handleClick} className={i + 1 === turtle.selectedSlot ? 'selected' : ''} style={{
+						<Paper onContextMenu={(ev) => handleClick(ev, i + 1)} className={i + 1 === turtle.selectedSlot ? 'selected' : ''} style={{
 							background: item ? Color({
-								h: hashCode(item.name) % 360,
+								h: hashCode(item.name + ':' + item.damage) % 360,
 								s: 60,
 								l: 40
 							}).toString() : undefined
 						}} onClick={() => turtle.selectSlot(i + 1)}>
 							{item &&
-								<Tooltip title={item.name}>
+								<Tooltip title={item.name + ':' + item.damage}>
 									<Typography align="center" variant="h4">{item.count}</Typography>
 								</Tooltip>
 							}

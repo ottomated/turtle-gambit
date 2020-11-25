@@ -1,6 +1,5 @@
 import WebSocket from "ws";
 import { EventEmitter } from 'events';
-import { first, last } from 'random-name';
 import World from "./world";
 
 export enum BlockDirection { FORWARD, UP, DOWN }
@@ -12,6 +11,8 @@ interface Slot {
 	name: string;
 	damage: number;
 }
+
+const names = ["Thanatos", "Psyche", "Hades", "Terpsichore", "Thisbe", "Pan", "Pallas", "Doris", "Hestia", "Adrastos", "Sarpedon", "Helios", "Phineus", "Aristodemos", "Iphigeneia", "Halkyone", "Iapetos", "Rheie", "Eudora", "Theseus", "Aristaeus", "Atropos", "Tisiphone", "Chryseis", "Dardanos", "Merope", "Arete", "Cassandra", "Hecate", "Amalthea", "Demophon", "Melissa", "Chloris", "Philander", "Selene", "Pistis", "Pegasus", "Perseus", "Briseis", "Linus", "Aiolos", "Kreios", "Orion", "Praxis", "Okeanos", "Melanthios", "Philomela", "Andromeda", "Klytie", "Achelous", "Alcippe", "Orpheus", "Deianeira", "Ares", "Euterpe", "Zephyr", "Kore", "Poseidon", "Ourania", "Iris", "Euanthe", "Koios", "Hermes", "Thalia", "Xanthe", "Atlas", "Hippolytos", "Daphne", "Hyperion", "Io", "Irene", "Kallisto", "Metis", "Pyrrhus", "Theia", "Damon", "Agaue", "Phobos", "Aeson", "Elpis", "Eros", "Minos", "Aoide", "Medea", "Pythios", "Hebe", "Dione", "Nemesis", "Dionysos", "Lamia", "Nereus", "Niobe", "Herakles", "Tyche", "Eunomia", "Medusa", "Lyssa", "Aglaia", "Athene", "Charon", "Laocoon", "Epimetheus", "Jason", "Delia", "Erato", "Atreus", "Nestor", "Prometheus", "Penelope", "Harmonia", "Priam", "Calypso", "Antiope", "Menelaus", "Endymion", "Nyx", "Eurydice", "Evadne", "Myrto", "Agamemnon", "Dike", "Echo", "Pandora", "Chloe", "Achilles", "Bacchus", "Proteus", "Euphrosyne", "Leto", "Phaenna", "Nike", "Melete", "Asklepios", "Myles", "Paris", "Melpomene", "Nephele", "Polymnia", "Kleio", "Chryses", "Apollo", "Mentor", "Andromache", "Icarus", "Zeus", "Artemis", "Despoina", "Priapus", "Melaina", "Hera", "Diomedes", "Enyo", "Koronis", "Morpheus", "Larisa", "Eos", "Parthenia", "Xanthos", "Semele", "Orestes", "Brontes", "Parthenope", "Ilithyia", "Aphrodite", "Demeter", "Arethusa", "Phrixus", "Hemera", "Leukippos", "Adonis", "Ganymede", "Klotho", "Theano", "Iole", "Notus", "Cassiopea", "Aella", "Themis", "Neilos", "Argus", "Mneme", "Iacchus", "Althea", "Tethys", "Callirrhoe", "Odysseus", "Phyllis", "Antigone", "Melia", "Melite", "Ariadne", "Euryalus", "Uranus", "Eris", "Lachesis", "Alcmene", "Ianthe", "Atalanta", "Helle", "Larissa", "Athena", "Nikephoros", "Rhea", "Phaedra", "Castor", "Deimos", "Kratos", "Boreas", "Mnemosyne", "Hermione", "Kalliope", "Tychon", "Persephone", "Ismene", "Ligeia", "Ione", "Midas", "Anthea"];
 
 export class Turtle extends EventEmitter {
 
@@ -27,6 +28,7 @@ export class Turtle extends EventEmitter {
 	y: number = 0;
 	z: number = 0;
 	d: Direction = 0;
+	mining: boolean = false;
 
 	constructor(ws: WebSocket, world: World) {
 		super();
@@ -36,7 +38,9 @@ export class Turtle extends EventEmitter {
 			if (label) {
 				this.label = label;
 			} else {
-				this.label = first() + ' ' + last();
+				let nameIndex = this.world.db.getData('/nameindex');
+				this.world.db.push('/nameindex', nameIndex + 1);
+				this.label = names[nameIndex];
 				await this.exec(`os.setComputerLabel("${this.label}")`);
 			}
 			this.id = await this.exec<number>('os.getComputerID()');
@@ -45,7 +49,8 @@ export class Turtle extends EventEmitter {
 			this.maxFuel = await this.exec<number>('turtle.getFuelLimit()');
 			this.fuel = await this.exec<number>('turtle.getFuelLevel()');
 			await this.updateFuel();
-			this.updateInventory();
+			await this.updateInventory();
+			await this.checkMiningResults();
 			this.emit('init');
 		});
 	}
@@ -61,7 +66,8 @@ export class Turtle extends EventEmitter {
 			d: this.d,
 			fuel: this.fuel,
 			maxFuel: this.maxFuel,
-			id: this.id
+			id: this.id,
+			mining: this.mining
 		};
 	}
 
@@ -226,6 +232,15 @@ export class Turtle extends EventEmitter {
 		await this.updateInventory();
 		return r;
 	}
+	async equip(side: 'left' | 'right') {
+		let r;
+		if (side === 'left')
+			r = await this.exec<boolean>('turtle.equipLeft()');
+		else
+			r = await this.exec<boolean>('turtle.equipRight()');
+		await this.updateInventory();
+		return r;
+	}
 	async selectSlot(slot: number) {
 		if (slot > 0 && slot < 17) {
 			this.selectedSlot = slot;
@@ -241,6 +256,24 @@ export class Turtle extends EventEmitter {
 		this.selectedSlot = await this.exec<number>('turtle.getSelectedSlot()');
 		this.maxFuel = await this.exec<number>('turtle.getFuelLimit()');
 		this.fuel = await this.exec<number>('turtle.getFuelLevel()');
+	}
+	async moveItems(slot: number, amount: 'all' | 'half' | 'one') {
+		let max = this.inventory[this.selectedSlot - 1]?.count;
+		if (max) {
+			let count = 1;
+			if (amount === 'all') count = max;
+			else if (amount === 'half') count = Math.floor(max / 2);
+			let r = await this.exec<boolean>(`turtle.transferTo(${slot}, ${count})`);
+			await this.updateInventory();
+			return r;
+		}
+		return false;
+	}
+
+	async craft(amount: 'all' | 'one') {
+		let r = await this.exec<boolean>(`turtle.craft(${amount === 'one' ? '1' : ''})`);
+		await this.updateInventory();
+		return r;
 	}
 	undergoMitosis(): Promise<number | null> {
 		return new Promise(r => {
@@ -261,5 +294,61 @@ export class Turtle extends EventEmitter {
 				r(res);
 			});
 		});
+	}
+	mineTunnel(length: number): void {
+		this.ws.send(JSON.stringify({
+			type: 'mine',
+			length
+		}));
+
+		this.mining = true;
+		this.emit('update');
+	}
+
+	checkMiningResults(): Promise<any[][] | null> {
+		return new Promise(async resolvePromise => {
+			this.ws.send(JSON.stringify({
+				type: 'mineResults'
+			}));
+
+			this.ws.once('message', async (resp: string) => {
+				let parsed;
+				try {
+					parsed = JSON.parse(resp);
+				} catch (e) {
+					resolvePromise(null);
+					return;
+				}
+				if (parsed !== null) {
+					const { blocks, orientation } = parsed;
+					this.mining = false;
+					let deltas = this.getDirectionDelta(this.d);
+					for (let i = 1; i <= blocks.length; i++) {
+						if (blocks[i - 1][0])
+							this.world.updateBlock(this.x + deltas[0] * i, this.y - 1, this.z + deltas[1] * i, blocks[i - 1][0]);
+						if (blocks[i - 1][1])
+							this.world.updateBlock(this.x + deltas[0] * i, this.y + 1, this.z + deltas[1] * i, blocks[i - 1][1]);
+						let leftDeltas = this.getDirectionDelta((this.d + 3) % 4);
+						let rightDeltas = this.getDirectionDelta((this.d + 1) % 4);
+						if (blocks[i - 1][2])
+							this.world.updateBlock(this.x + deltas[0] * i + leftDeltas[0], this.y, this.z + deltas[1] * i + leftDeltas[1], blocks[i - 1][2]);
+						if (blocks[i - 1][3])
+							this.world.updateBlock(this.x + deltas[0] * i + rightDeltas[0], this.y, this.z + deltas[1] * i + rightDeltas[1], blocks[i - 1][3]);
+					}
+					this.x += deltas[0] * blocks.length;
+					this.z += deltas[1] * blocks.length;
+					this.d += orientation;
+					this.world.updateTurtle(this, this.x, this.y, this.z, this.d);
+					await this.updateInventory();
+					await this.updateFuel();
+					await this.updateBlock();
+					resolvePromise(parsed);
+				}
+				resolvePromise(null);
+			});
+		});
+	}
+	async disconnect() {
+		this.ws.close();
 	}
 }

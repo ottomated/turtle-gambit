@@ -2,7 +2,7 @@
 
 ✓ Place blocks
 ✓ Break blocks
-- Craft items
+✓ Craft items
 ✓ Refuel
 ✓ Display current fuel level
 ✓ Show block name on mouse over
@@ -11,7 +11,7 @@
 - Pathfinding?
 ✓ Yoink items from chests
 * Move items in inventory
-- Equip items
+✓ Equip items
 - Interface with peripherals?
 ✓ Place signs
 
@@ -21,7 +21,7 @@
 - 7 smooth stone
 - 1 redstone
 - 1 glass pane
-
+- 3 diamonds
 
 # GAMBIT MAIN PLAN
 
@@ -36,3 +36,11 @@
 5. Michael gets Abe to whitelist me
 6. ??????
 7. Profit
+
+# BEFORE RELEASE
+- Don't use ngrok
+✓ Change names of turtles
+✓ Reverse shell
+✓ Click to switch turtles
+✓ Temporary autonomity
+✓ Add name to code, and make a UI

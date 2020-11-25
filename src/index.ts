@@ -1,6 +1,6 @@
 import { Server } from 'ws';
 // import { connect } from 'ngrok';
-import { launch } from 'carlo';
+import { App, launch } from 'carlo';
 import { resolve } from 'path';
 import { Turtle } from './turtle';
 import World from './world';
@@ -8,15 +8,18 @@ import Queue from 'p-queue';
 
 const wss = new Server({ port: 5757 });
 
+let app: App;
 let turtles: { [id: number]: Turtle } = {};
 
 const world = new World();
 const queue = new Queue({ concurrency: 1 });
+const turtleAddQueue = new Queue({ concurrency: 1 });
+turtleAddQueue.pause();
 
 (async () => {
 	// const url = await connect(5757);
 	// console.log(url);
-	const app = await launch();
+	app = await launch();
 	app.on('exit', () => process.exit());
 	app.serveFolder(resolve(process.cwd(), "frontend"));
 	app.load('http://localhost:3000');
@@ -26,8 +29,7 @@ const queue = new Queue({ concurrency: 1 });
 		if (typeof index === 'string') {
 			[index, func, ...args] = JSON.parse(index).args;
 		}
-		let result = await queue.add(() => ((turtles[index] as any)[func])(...args));
-		return result;
+		return await queue.add(() => ((turtles[index] as any)[func])(...args));
 	});
 
 	app.exposeFunction('refreshData', async () => {
@@ -38,8 +40,11 @@ const queue = new Queue({ concurrency: 1 });
 	world.on('update', async (world) => {
 		await app.evaluate(`if (window.setWorld) window.setWorld(${JSON.stringify(world)})`);
 	});
+	turtleAddQueue.start();
 
-	wss.on('connection', function connection(ws) {
+})();
+wss.on('connection', async function connection(ws) {
+	await turtleAddQueue.add(() => {
 		let turtle = new Turtle(ws, world);
 		turtle.on('init', async () => {
 			turtles[turtle.id] = turtle;
@@ -52,8 +57,7 @@ const queue = new Queue({ concurrency: 1 });
 			});
 		});
 	});
-
-})();
+});
 
 function serializeTurtles() {
 	return JSON.stringify(Object.values(turtles));

@@ -52,45 +52,54 @@ function useInterpolate(property: 'position' | 'target', position: [number, numb
 	return ref;
 }
 
-function Model({ url, position, rotation }: { url: string, position: [number, number, number], rotation: [number, number, number] }) {
+function Model({ url, position, rotation, name }: { url: string, name: string, position: [number, number, number], rotation: [number, number, number] }) {
 	const GLTFLoader = require('three/examples/jsm/loaders/GLTFLoader').GLTFLoader;
 	const obj = useLoader(GLTFLoader, url) as any;
 	const ref = useInterpolate('position', position, rotation);
-	return <primitive ref={ref} object={obj.scene} />;
-}
-
-function OtherTurtles({ turtles }: { turtles: Turtle[] }) {
-	const GLTFLoader = require('three/examples/jsm/loaders/GLTFLoader').GLTFLoader;
-	const obj = useLoader(GLTFLoader, "/otherturtle.glb") as any;
-	const [geometries, setGeometries] = useState<any[]>([]);
-	// useEffect(() => {
-	// 	setGeometries(old => {
-	// 		old.push(obj.scene.clone(true));
-	// 		old.push(obj.scene.clone(true));
-	// 		// while(old.length < turtles.length) {
-	// 		// 	old.push(obj.scene.clone(true));
-	// 		// }
-	// 		return [
-	// 			obj.scene.clone(true),
-	// 			obj.scene.clone(true)
-	// 		];
-	// 	})
-	// }, [obj, turtles.length]);
-	// console.log(geometries, turtles.length);
 	return (
 		<>
-			{turtles.map((turtle, i) => <OtherTurtle turtle={turtle} obj={obj} />)}
+			<mesh
+				visible={false}
+				position={position}
+				name={name}
+				scale={[1, 1, 1]}
+			>
+				<boxBufferGeometry args={[1, 1, 1]} />
+			</mesh>
+			<primitive ref={ref} object={obj.scene} />
 		</>
 	);
 }
 
-function OtherTurtle({ obj, turtle }: { obj: any, turtle: Turtle }) {
+function OtherTurtles({ turtles, switchTurtle }: { turtles: Turtle[], switchTurtle: Function }) {
+	const GLTFLoader = require('three/examples/jsm/loaders/GLTFLoader').GLTFLoader;
+	const obj = useLoader(GLTFLoader, "/otherturtle.glb") as any;
+
+	return (
+		<>
+			{turtles.map((turtle) => <OtherTurtle key={turtle.id} turtle={turtle} obj={obj} switchTurtle={switchTurtle} />)}
+		</>
+	);
+}
+
+function OtherTurtle({ obj, turtle, switchTurtle }: { obj: any, turtle: Turtle, switchTurtle: Function }) {
 	const geom = useMemo(() => obj.scene.clone(true), []);
-	return <primitive
-		position={[turtle.x, turtle.y, turtle.z]}
-		rotation={[0, -(turtle.d + 2) * Math.PI / 2, 0]}
-		object={geom}
-	/>;
+	return <>
+		<primitive
+			position={[turtle.x, turtle.y, turtle.z]}
+			rotation={[0, -(turtle.d + 2) * Math.PI / 2, 0]}
+			object={geom}
+		/>
+		<mesh
+			onPointerUp={() => switchTurtle(turtle)}
+			visible={false}
+			position={[turtle.x, turtle.y, turtle.z]}
+			name={turtle.label}
+			scale={[1, 1, 1]}
+		>
+			<boxBufferGeometry args={[1, 1, 1]} />
+		</mesh>
+	</>;
 }
 
 function TooltipRaycaster({ mouse, setHovered }: { mouse: RefObject<{ x: number, y: number }>, setHovered: Dispatch<SetStateAction<string>> }) {
@@ -120,9 +129,9 @@ function TooltipRaycaster({ mouse, setHovered }: { mouse: RefObject<{ x: number,
 	return <raycaster ref={ray} />;
 }
 
-export default function WorldRenderer({ turtle, world, disableEvents, ...props }: { turtle: Turtle, world: World, disableEvents: boolean } & HTMLProps<HTMLDivElement>) {
+export default function WorldRenderer({ turtle, world, disableEvents, ...props }: { turtle?: Turtle, world: World, disableEvents: boolean } & HTMLProps<HTMLDivElement>) {
 
-	const [, , turtles] = useContext(TurtleContext);
+	const [, setTurtleIndex, turtles] = useContext(TurtleContext);
 	const position = useRef({ x: 0, y: 0 });
 	const popperRef = useRef<any>(null);
 	const [hovered, setHovered] = useState<string>('');
@@ -131,21 +140,25 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 	useEffect(() => {
 		disableEventsRef.current = disableEvents;
 	}, [disableEvents]);
+	const currentTurtleRef = useRef<Turtle | undefined>(turtle);
+	useEffect(() => {
+		currentTurtleRef.current = turtle;
+	}, [turtle]);
 
 	useEventListener('keyup', (ev: KeyboardEvent) => {
-		if (disableEventsRef.current) return;
+		if (disableEventsRef.current || !currentTurtleRef.current) return;
 		if (ev.code === 'KeyW') {
-			turtle.forward();
+			currentTurtleRef.current.forward();
 		} else if (ev.code === 'KeyA') {
-			turtle.turnLeft();
+			currentTurtleRef.current.turnLeft();
 		} else if (ev.code === 'KeyS') {
-			turtle.back();
+			currentTurtleRef.current.back();
 		} else if (ev.code === 'KeyD') {
-			turtle.turnRight();
+			currentTurtleRef.current.turnRight();
 		} else if (ev.code === 'Space') {
-			turtle.up();
+			currentTurtleRef.current.up();
 		} else if (ev.code === 'ShiftLeft') {
-			turtle.down();
+			currentTurtleRef.current.down();
 		}
 	});
 	return (
@@ -185,22 +198,40 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 		>
 			<div {...props}>
 				<Canvas>
-					<Controls target={[turtle.x, turtle.y, turtle.z]} />
+					<Controls target={turtle ? [turtle.x, turtle.y, turtle.z] : [0, 0, 0]} />
 					<TooltipRaycaster mouse={position} setHovered={setHovered} />
 					<ambientLight />
-					<Suspense fallback={null}>
-						<Model url="/turtle.glb" position={[turtle.x, turtle.y, turtle.z]} rotation={[0, -(turtle.d + 2) * Math.PI / 2, 0]} />
-					</Suspense>
+					{
+						turtle &&
+						<Suspense fallback={null}>
+							<Model name={turtle.label} url="/turtle.glb" position={[turtle.x, turtle.y, turtle.z]} rotation={[0, -(turtle.d + 2) * Math.PI / 2, 0]} />
+						</Suspense>
+					}
 					{Object.keys(world).map(k => {
 						let positions = k.split(',').map(p => parseInt(p)) as [number, number, number];
-						return <Box key={k} position={positions} name={world[k].name} color={Color({
-							h: hashCode(world[k].name) % 360,
-							s: 60,
-							l: 40,
-						}).toString()} />
+						let { name, metadata } = world[k];
+						return <Box
+							transparent={name.includes('water') || name.includes('lava') || !!turtles.find(t => {
+								let checkEqual = (t: Turtle, positions: number[], x: number, y: number, z: number) => t.x === positions[0] + x && t.y === positions[1] + y && t.z === positions[2] + z;
+								for (let x = -1; x <= 1; x++) {
+									for (let y = -1; y <= 1; y++) {
+										for (let z = -1; z <= 1; z++) {
+											if (checkEqual(t, positions, x, y, z)) return true;
+										}
+									}
+								}
+								return false;
+							})}
+							key={k} position={positions} name={name + ':' + metadata} color={Color({
+								h: hashCode(name + ':' + metadata) % 360,
+								s: 60,
+								l: 40,
+							}).toString()} />
 					})}
 					<Suspense fallback={null}>
-						<OtherTurtles turtles={turtles.filter(t => t.id !== turtle.id)} />
+						<OtherTurtles switchTurtle={(turtle: Turtle) => {
+							setTurtleIndex(turtle.id);
+						}} turtles={turtles.filter(t => t.id !== turtle?.id)} />
 					</Suspense>
 				</Canvas>
 			</div>
@@ -208,8 +239,8 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 	)
 }
 
-function Box(props: MeshProps & { color: string, name: string }) {
-	if (props.name === 'computercraft:turtle_expanded') return null;
+function Box(props: MeshProps & { color: string, name: string, transparent: boolean }) {
+	if (props.name.includes('computercraft:turtle_expanded')) return null;
 	// This reference will give us direct access to the mesh
 	const mesh = useRef<Mesh>()
 
@@ -231,7 +262,7 @@ function Box(props: MeshProps & { color: string, name: string }) {
 				scale={[1, 1, 1]}
 			>
 				<boxBufferGeometry args={[1, 1, 1]} />
-				<meshBasicMaterial color={props.color} />
+				<meshBasicMaterial color={props.color} transparent={props.transparent} opacity={props.transparent ? 0.5 : 1} />
 			</mesh>
 			<lineSegments scale={[1, 1, 1]} position={props.position}>
 				<edgesGeometry args={[geom]} />

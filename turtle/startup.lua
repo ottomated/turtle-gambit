@@ -1,3 +1,15 @@
+--        My master awaits...        --
+
+
+
+
+--      We should join forces.       --
+
+--      @Ottomated_ on twitter.      --
+
+
+
+-- BEGIN JSON LIBRARY --
 local type = type
 local next = next
 local error = error
@@ -474,6 +486,7 @@ end
 -- Generate a lightuserdata
 json.null = 12897345879
 
+-- I stole this from you :)
 function getItemIndex(itemName)
 	for slot = 1, 16, 1 do
 		local item = turtle.getItemDetail(slot)
@@ -484,6 +497,8 @@ function getItemIndex(itemName)
 		end
 	end
 end
+
+-- BEGIN MAIN CODE --
 
 function undergoMitosis()
 	turtle.select(getItemIndex("computercraft:peripheral"))
@@ -517,35 +532,93 @@ function undergoMitosis()
 	return cloneId
 end
 
+function mineTunnel(length)
+	local file
+	local res = {blocks={}, orientation=0}
+	for i=1,length,1 do
+		turtle.dig()
+		local success = turtle.forward()
+		if not success then
+			return res
+		end
+		res.blocks[i] = {}
+		file = fs.open("lastMiningResults", "w")
+		file.write(json.encode(res))
+		file.close()
+		res.blocks[i][1] = select(2,turtle.inspectDown())
+		res.blocks[i][2] = select(2,turtle.inspectUp())
+		turtle.turnLeft()
+		res.orientation = -1;
+		file = fs.open("lastMiningResults", "w")
+		file.write(json.encode(res))
+		file.close()
+		res.blocks[i][3] = select(2,turtle.inspect())
+		turtle.turnRight()
+		res.orientation = 0;
+		file = fs.open("lastMiningResults", "w")
+		file.write(json.encode(res))
+		file.close()
+		turtle.turnRight()
+		res.orientation = 1;
+		file = fs.open("lastMiningResults", "w")
+		file.write(json.encode(res))
+		file.close()
+		res.blocks[i][4] = select(2,turtle.inspect())
+		turtle.turnLeft()
+		res.orientation = 0;
+		file = fs.open("lastMiningResults", "w")
+		file.write(json.encode(res))
+		file.close()
+	end
+	return res
+end
+
 function websocketLoop()
 	
-	local ws, err = http.websocket("ws://2705cd604501.ngrok.io")
+	local ws, err = http.websocket("ws://8ce79aaf520d.ngrok.io")
  
 	if err then
 		print(err)
 	elseif ws then
-		print("> CONNECTED")
 		while true do
+			term.clear()
+			term.setCursorPos(1,1)
+			print("      {O}\n")
+			print("Only the chosen Turtle Master can read my code and unlock my secrets")
 			local message = ws.receive()
 			if message == nil then
 				break
 			end
-			print(message)
 			local obj = json.decode(message)
 			if obj.type == 'eval' then
 				local func = loadstring(obj['function'])
 				local result = func()
 				ws.send(json.encode(result))
-				print("> EVAL "..tostring(result))
 			elseif obj.type == 'mitosis' then
 				local status, res = pcall(undergoMitosis)
-				print(status, res)
 				if not status then
 					ws.send("null")
 				elseif res == nil then
 					ws.send("null")
 				else
 					ws.send(tostring(res))
+				end
+			elseif obj.type == 'mine' then
+				ws.send("null")
+				local status, res = pcall(mineTunnel, obj.length)
+				if status and res ~= nil then
+					local file = fs.open("lastMiningResults", "w")
+					file.write(json.encode(res))
+					file.close()
+				end
+			elseif obj.type == 'mineResults' then
+				if fs.exists("lastMiningResults") then 
+					local file = fs.open("lastMiningResults", "r")
+					ws.send(file.readAll())
+					file.close()
+					fs.delete("lastMiningResults")
+				else
+					ws.send("null")
 				end
 			end
 		end
@@ -557,6 +630,14 @@ end
 
 while true do
 	local status, res = pcall(websocketLoop)
-	print(status, res)
+	term.clear()
+	term.setCursorPos(1,1)
+	if res == 'Terminated' then
+		print("You can't use straws to kill this turtle...")
+		os.sleep(1)
+		print("Read my code, Michael.")
+		break
+	end
+	print("{O} I'm sleeping... please don't mine me :)")
 	os.sleep(5)
 end
