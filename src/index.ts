@@ -1,0 +1,60 @@
+import { Server } from 'ws';
+// import { connect } from 'ngrok';
+import { launch } from 'carlo';
+import { resolve } from 'path';
+import { Turtle } from './turtle';
+import World from './world';
+import Queue from 'p-queue';
+
+const wss = new Server({ port: 5757 });
+
+let turtles: { [id: number]: Turtle } = {};
+
+const world = new World();
+const queue = new Queue({ concurrency: 1 });
+
+(async () => {
+	// const url = await connect(5757);
+	// console.log(url);
+	const app = await launch();
+	app.on('exit', () => process.exit());
+	app.serveFolder(resolve(process.cwd(), "frontend"));
+	app.load('http://localhost:3000');
+	// await app.load('index.html');
+
+	app.exposeFunction('exec', async (index: number, func: string, ...args: any[]) => {
+		if (typeof index === 'string') {
+			[index, func, ...args] = JSON.parse(index).args;
+		}
+		let result = await queue.add(() => ((turtles[index] as any)[func])(...args));
+		return result;
+	});
+
+	app.exposeFunction('refreshData', async () => {
+		await app.evaluate(`if (window.setWorld) window.setWorld(${JSON.stringify(world.getAllBlocks())})`);
+		await app.evaluate(`if (window.setTurtles) window.setTurtles(${serializeTurtles()})`);
+	})
+
+	world.on('update', async (world) => {
+		await app.evaluate(`if (window.setWorld) window.setWorld(${JSON.stringify(world)})`);
+	});
+
+	wss.on('connection', function connection(ws) {
+		let turtle = new Turtle(ws, world);
+		turtle.on('init', async () => {
+			turtles[turtle.id] = turtle;
+			turtle.on('update', () => app.evaluate(`if (window.setTurtles) window.setTurtles(${serializeTurtles()})`));
+			await app.evaluate(`if (window.setTurtles) window.setTurtles(${serializeTurtles()})`)
+			await app.evaluate(`if (window.setWorld) window.setWorld(${JSON.stringify(world.getAllBlocks())})`);
+			ws.on('close', async () => {
+				delete turtles[turtle.id];
+				await app.evaluate(`if (window.setTurtles) window.setTurtles(${serializeTurtles()})`)
+			});
+		});
+	});
+
+})();
+
+function serializeTurtles() {
+	return JSON.stringify(Object.values(turtles));
+}

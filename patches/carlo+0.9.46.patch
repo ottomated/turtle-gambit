@@ -1,0 +1,15 @@
+diff --git a/node_modules/carlo/lib/carlo.js b/node_modules/carlo/lib/carlo.js
+index 902e137..4a98283 100644
+--- a/node_modules/carlo/lib/carlo.js
++++ b/node_modules/carlo/lib/carlo.js
+@@ -64,9 +64,7 @@ class App extends EventEmitter {
+             'midi',
+             'notifications',
+             'camera',
+-            'microphone',
+-            'clipboard-read',
+-            'clipboard-write']),
++            'microphone']),
+       this.browser_.pages().then(pages => page = pages[0])
+     ]);
+ 
