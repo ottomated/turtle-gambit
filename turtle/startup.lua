@@ -532,50 +532,70 @@ function undergoMitosis()
 	return cloneId
 end
 
-function mineTunnel(length)
+function mineTunnel(obj, ws)
 	local file
-	local res = {blocks={}, orientation=0}
-	for i=1,length,1 do
-		turtle.dig()
-		local success = turtle.forward()
-		if not success then
-			return res
+	local blocks = {}
+	for i=1,obj.length,1 do
+		if obj.direction == 'forward' then
+			turtle.dig()
+			local success = turtle.forward()
+			if not success then
+				return res
+			end
+			ws.send(json.encode({move="f", nonce=obj.nonce}))
+			blocks[i] = {}
+			blocks[i][1] = select(2,turtle.inspectDown())
+			blocks[i][2] = select(2,turtle.inspectUp())
+			turtle.turnLeft()
+			ws.send(json.encode({move="l", nonce=obj.nonce}))
+			blocks[i][3] = select(2,turtle.inspect())
+			turtle.turnRight()
+			ws.send(json.encode({move="r", nonce=obj.nonce}))
+			turtle.turnRight()
+			ws.send(json.encode({move="r", nonce=obj.nonce}))
+			blocks[i][4] = select(2,turtle.inspect())
+			turtle.turnLeft()
+			ws.send(json.encode({move="l", blocks=blocks[i], nonce=obj.nonce}))
+		else
+			if obj.direction == 'up' then 
+				turtle.digUp()
+				local success = turtle.up()
+				if not success then
+					return res
+				end
+				ws.send(json.encode({move="u", nonce=obj.nonce}))
+			else
+				turtle.digDown()
+				local success = turtle.down()
+				if not success then
+					return res
+				end
+				ws.send(json.encode({move="d", nonce=obj.nonce}))
+			end
+
+			blocks[i] = {}
+			blocks[i][1] = select(2,turtle.inspect())
+			turtle.turnLeft()
+			ws.send(json.encode({move="l", nonce=obj.nonce}))
+
+			blocks[i][2] = select(2,turtle.inspect())
+			turtle.turnLeft()
+			ws.send(json.encode({move="l", nonce=obj.nonce}))
+
+			blocks[i][3] = select(2,turtle.inspect())
+			turtle.turnLeft()
+			ws.send(json.encode({move="l", nonce=obj.nonce}))
+
+			blocks[i][4] = select(2,turtle.inspect())
+			ws.send(json.encode({blocks=blocks[i], nonce=obj.nonce}))
 		end
-		res.blocks[i] = {}
-		file = fs.open("lastMiningResults", "w")
-		file.write(json.encode(res))
-		file.close()
-		res.blocks[i][1] = select(2,turtle.inspectDown())
-		res.blocks[i][2] = select(2,turtle.inspectUp())
-		turtle.turnLeft()
-		res.orientation = -1;
-		file = fs.open("lastMiningResults", "w")
-		file.write(json.encode(res))
-		file.close()
-		res.blocks[i][3] = select(2,turtle.inspect())
-		turtle.turnRight()
-		res.orientation = 0;
-		file = fs.open("lastMiningResults", "w")
-		file.write(json.encode(res))
-		file.close()
-		turtle.turnRight()
-		res.orientation = 1;
-		file = fs.open("lastMiningResults", "w")
-		file.write(json.encode(res))
-		file.close()
-		res.blocks[i][4] = select(2,turtle.inspect())
-		turtle.turnLeft()
-		res.orientation = 0;
-		file = fs.open("lastMiningResults", "w")
-		file.write(json.encode(res))
-		file.close()
 	end
-	return res
+	return blocks
 end
 
 function websocketLoop()
 	
-	local ws, err = http.websocket("ws://8ce79aaf520d.ngrok.io")
+	local ws, err = http.websocket("ws://ottomated.net:43509")
  
 	if err then
 		print(err)
@@ -584,7 +604,7 @@ function websocketLoop()
 			term.clear()
 			term.setCursorPos(1,1)
 			print("      {O}\n")
-			print("Only the chosen Turtle Master can read my code and unlock my secrets")
+			print("Pog Turtle OS. Do not read my code unless you are 5Head.")
 			local message = ws.receive()
 			if message == nil then
 				break
@@ -593,33 +613,19 @@ function websocketLoop()
 			if obj.type == 'eval' then
 				local func = loadstring(obj['function'])
 				local result = func()
-				ws.send(json.encode(result))
+				ws.send(json.encode({data=result, nonce=obj.nonce}))
 			elseif obj.type == 'mitosis' then
 				local status, res = pcall(undergoMitosis)
 				if not status then
-					ws.send("null")
+					ws.send(json.encode({data="null", nonce=obj.nonce}))
 				elseif res == nil then
-					ws.send("null")
+					ws.send(json.encode({data="null", nonce=obj.nonce}))
 				else
-					ws.send(tostring(res))
+					ws.send(json.encode({data=res, nonce=obj.nonce}))
 				end
 			elseif obj.type == 'mine' then
-				ws.send("null")
-				local status, res = pcall(mineTunnel, obj.length)
-				if status and res ~= nil then
-					local file = fs.open("lastMiningResults", "w")
-					file.write(json.encode(res))
-					file.close()
-				end
-			elseif obj.type == 'mineResults' then
-				if fs.exists("lastMiningResults") then 
-					local file = fs.open("lastMiningResults", "r")
-					ws.send(file.readAll())
-					file.close()
-					fs.delete("lastMiningResults")
-				else
-					ws.send("null")
-				end
+				local status, res = pcall(mineTunnel, obj, ws)
+				ws.send(json.encode({data="end", nonce=obj.nonce}))
 			end
 		end
 	end

@@ -21,9 +21,8 @@ turtleAddQueue.pause();
 	// console.log(url);
 	app = await launch();
 	app.on('exit', () => process.exit());
-	app.serveFolder(resolve(process.cwd(), "frontend"));
-	app.load('http://localhost:3000');
-	// await app.load('index.html');
+	app.serveFolder(resolve(process.cwd(), "frontend/out"));
+	// app.load('http://localhost:3000');
 
 	app.exposeFunction('exec', async (index: number, func: string, ...args: any[]) => {
 		if (typeof index === 'string') {
@@ -37,6 +36,7 @@ turtleAddQueue.pause();
 		await app.evaluate(`if (window.setTurtles) window.setTurtles(${serializeTurtles()})`);
 	})
 
+	await app.load('http://localhost:3000');
 	world.on('update', async (world) => {
 		await app.evaluate(`if (window.setWorld) window.setWorld(${JSON.stringify(world)})`);
 	});

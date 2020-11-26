@@ -135,6 +135,8 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 	const position = useRef({ x: 0, y: 0 });
 	const popperRef = useRef<any>(null);
 	const [hovered, setHovered] = useState<string>('');
+	const [showWholeWorld, setShowWholeWorld] = useState<boolean>(false);
+	const [dontShowStone, setDontShowStone] = useState<boolean>(false);
 
 	const disableEventsRef = useRef<boolean>(disableEvents);
 	useEffect(() => {
@@ -147,18 +149,35 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 
 	useEventListener('keyup', (ev: KeyboardEvent) => {
 		if (disableEventsRef.current || !currentTurtleRef.current) return;
+		let moved = false;
 		if (ev.code === 'KeyW') {
+			moved = true;
 			currentTurtleRef.current.forward();
 		} else if (ev.code === 'KeyA') {
+			moved = true;
 			currentTurtleRef.current.turnLeft();
 		} else if (ev.code === 'KeyS') {
+			moved = true;
 			currentTurtleRef.current.back();
 		} else if (ev.code === 'KeyD') {
+			moved = true;
 			currentTurtleRef.current.turnRight();
 		} else if (ev.code === 'Space') {
+			moved = true;
 			currentTurtleRef.current.up();
 		} else if (ev.code === 'ShiftLeft') {
+			moved = true;
 			currentTurtleRef.current.down();
+		} else if (ev.code === 'KeyV') {
+			moved = true;
+			setShowWholeWorld(w => !w);
+		} else if (ev.code === 'KeyB') {
+			moved = true;
+			setDontShowStone(w => !w);
+		}
+		if (moved) {
+			ev.stopPropagation();
+			ev.preventDefault();
 		}
 	});
 	return (
@@ -210,6 +229,12 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 					{Object.keys(world).map(k => {
 						let positions = k.split(',').map(p => parseInt(p)) as [number, number, number];
 						let { name, metadata } = world[k];
+						if (dontShowStone && name ==='minecraft:stone') {
+							return null;
+						}
+						if (!showWholeWorld && turtle && (Math.pow(positions[0] - turtle.x, 2) + Math.pow(positions[1] - turtle.y, 2) + Math.pow(positions[2] - turtle.z, 2)) > 1000) {
+							return null;
+						}
 						return <Box
 							transparent={name.includes('water') || name.includes('lava') || !!turtles.find(t => {
 								let checkEqual = (t: Turtle, positions: number[], x: number, y: number, z: number) => t.x === positions[0] + x && t.y === positions[1] + y && t.z === positions[2] + z;
@@ -227,7 +252,7 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 								s: 60,
 								l: 40,
 							}).toString()} />
-					})}
+					}).filter(b => b)}
 					<Suspense fallback={null}>
 						<OtherTurtles switchTurtle={(turtle: Turtle) => {
 							setTurtleIndex(turtle.id);

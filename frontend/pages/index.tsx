@@ -119,11 +119,8 @@ export class Turtle extends EventEmitter {
 	async equip(side: 'left' | 'right') {
 		return window.exec<string>(this.id, 'equip', side);
 	}
-	async mineTunnel(length: number) {
-		return window.exec<string>(this.id, 'mineTunnel', length);
-	}
-	async checkMiningResults() {
-		return window.exec<string>(this.id, 'checkMiningResults');
+	async mineTunnel(direction: string, length: number) {
+		return window.exec<string>(this.id, 'mineTunnel', direction, length);
 	}
 }
 

@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { EventEmitter } from 'events';
 import World from "./world";
+import { randomBytes } from 'crypto';
 
 export enum BlockDirection { FORWARD, UP, DOWN }
 export enum Direction { NORTH, EAST, SOUTH, WEST }
@@ -10,6 +11,16 @@ interface Slot {
 	count: number;
 	name: string;
 	damage: number;
+}
+
+const nonces = new Set();
+function getNonce(): string {
+	let nonce = '';
+	while (nonce === '' || nonces.has(nonce)) {
+		nonce = randomBytes(4).toString('hex');
+	}
+	nonces.add(nonce);
+	return nonce;
 }
 
 const names = ["Thanatos", "Psyche", "Hades", "Terpsichore", "Thisbe", "Pan", "Pallas", "Doris", "Hestia", "Adrastos", "Sarpedon", "Helios", "Phineus", "Aristodemos", "Iphigeneia", "Halkyone", "Iapetos", "Rheie", "Eudora", "Theseus", "Aristaeus", "Atropos", "Tisiphone", "Chryseis", "Dardanos", "Merope", "Arete", "Cassandra", "Hecate", "Amalthea", "Demophon", "Melissa", "Chloris", "Philander", "Selene", "Pistis", "Pegasus", "Perseus", "Briseis", "Linus", "Aiolos", "Kreios", "Orion", "Praxis", "Okeanos", "Melanthios", "Philomela", "Andromeda", "Klytie", "Achelous", "Alcippe", "Orpheus", "Deianeira", "Ares", "Euterpe", "Zephyr", "Kore", "Poseidon", "Ourania", "Iris", "Euanthe", "Koios", "Hermes", "Thalia", "Xanthe", "Atlas", "Hippolytos", "Daphne", "Hyperion", "Io", "Irene", "Kallisto", "Metis", "Pyrrhus", "Theia", "Damon", "Agaue", "Phobos", "Aeson", "Elpis", "Eros", "Minos", "Aoide", "Medea", "Pythios", "Hebe", "Dione", "Nemesis", "Dionysos", "Lamia", "Nereus", "Niobe", "Herakles", "Tyche", "Eunomia", "Medusa", "Lyssa", "Aglaia", "Athene", "Charon", "Laocoon", "Epimetheus", "Jason", "Delia", "Erato", "Atreus", "Nestor", "Prometheus", "Penelope", "Harmonia", "Priam", "Calypso", "Antiope", "Menelaus", "Endymion", "Nyx", "Eurydice", "Evadne", "Myrto", "Agamemnon", "Dike", "Echo", "Pandora", "Chloe", "Achilles", "Bacchus", "Proteus", "Euphrosyne", "Leto", "Phaenna", "Nike", "Melete", "Asklepios", "Myles", "Paris", "Melpomene", "Nephele", "Polymnia", "Kleio", "Chryses", "Apollo", "Mentor", "Andromache", "Icarus", "Zeus", "Artemis", "Despoina", "Priapus", "Melaina", "Hera", "Diomedes", "Enyo", "Koronis", "Morpheus", "Larisa", "Eos", "Parthenia", "Xanthos", "Semele", "Orestes", "Brontes", "Parthenope", "Ilithyia", "Aphrodite", "Demeter", "Arethusa", "Phrixus", "Hemera", "Leukippos", "Adonis", "Ganymede", "Klotho", "Theano", "Iole", "Notus", "Cassiopea", "Aella", "Themis", "Neilos", "Argus", "Mneme", "Iacchus", "Althea", "Tethys", "Callirrhoe", "Odysseus", "Phyllis", "Antigone", "Melia", "Melite", "Ariadne", "Euryalus", "Uranus", "Eris", "Lachesis", "Alcmene", "Ianthe", "Atalanta", "Helle", "Larissa", "Athena", "Nikephoros", "Rhea", "Phaedra", "Castor", "Deimos", "Kratos", "Boreas", "Mnemosyne", "Hermione", "Kalliope", "Tychon", "Persephone", "Ismene", "Ligeia", "Ione", "Midas", "Anthea"];
@@ -50,7 +61,6 @@ export class Turtle extends EventEmitter {
 			this.fuel = await this.exec<number>('turtle.getFuelLevel()');
 			await this.updateFuel();
 			await this.updateInventory();
-			await this.checkMiningResults();
 			this.emit('init');
 		});
 	}
@@ -73,16 +83,24 @@ export class Turtle extends EventEmitter {
 
 	exec<T>(command: string): Promise<T> {
 		return new Promise(r => {
+			const nonce = getNonce();
 			this.ws.send(JSON.stringify({
 				type: 'eval',
-				function: `return ${command}`
+				function: `return ${command}`,
+				nonce
 			}));
 
-			this.ws.once('message', (resp: string) => {
-				let res = JSON.parse(resp);
-				if (res === 'null') res = null;
-				r(res);
-			});
+			const listener = (resp: string) => {
+				try {
+					let res = JSON.parse(resp);
+					if (res?.nonce === nonce) {
+						r(res.data);
+						this.ws.off('message', listener);
+					}
+				} catch (e) { }
+			};
+
+			this.ws.on('message', listener);
 		});
 	}
 
@@ -277,77 +295,112 @@ export class Turtle extends EventEmitter {
 	}
 	undergoMitosis(): Promise<number | null> {
 		return new Promise(r => {
+			const nonce = getNonce();
 			this.ws.send(JSON.stringify({
-				type: 'mitosis'
+				type: 'mitosis',
+				nonce
 			}));
 
-			this.ws.once('message', async (resp: string) => {
-				let res: number | null = JSON.parse(resp);
-				if ((res as any) === 'null') res = null;
-				if (res !== null) {
-					let deltas = this.getDirectionDelta(this.d);
-					this.world.db.push(`/turtles/${res}`, [this.x + deltas[0], this.y + 1, this.z + deltas[1], this.d]);
-				}
-				await this.updateInventory();
-				await this.updateBlock();
-				this.fuel = await this.exec<number>('turtle.getFuelLevel()');
-				r(res);
-			});
+			const listener = async (resp: string) => {
+				try {
+					let res = JSON.parse(resp);
+					if (res.nonce === nonce) {
+						if (res !== null) {
+							let deltas = this.getDirectionDelta(this.d);
+							this.world.db.push(`/turtles/${res.data}`, [this.x + deltas[0], this.y + 1, this.z + deltas[1], this.d]);
+						}
+						await this.updateInventory();
+						await this.updateBlock();
+						this.fuel = await this.exec<number>('turtle.getFuelLevel()');
+						r(res.data);
+						this.ws.off('message', listener);
+					}
+				} catch (e) { }
+			}
+
+			this.ws.on('message', listener);
 		});
 	}
-	mineTunnel(length: number): void {
+	mineTunnel(direction: 'up' | 'forward' | 'down', length: number): void {
+		const nonce = getNonce();
 		this.ws.send(JSON.stringify({
 			type: 'mine',
-			length
+			length: length || 0,
+			direction,
+			nonce
 		}));
 
-		this.mining = true;
-		this.emit('update');
-	}
-
-	checkMiningResults(): Promise<any[][] | null> {
-		return new Promise(async resolvePromise => {
-			this.ws.send(JSON.stringify({
-				type: 'mineResults'
-			}));
-
-			this.ws.once('message', async (resp: string) => {
-				let parsed;
-				try {
-					parsed = JSON.parse(resp);
-				} catch (e) {
-					resolvePromise(null);
-					return;
-				}
-				if (parsed !== null) {
-					const { blocks, orientation } = parsed;
-					this.mining = false;
-					let deltas = this.getDirectionDelta(this.d);
-					for (let i = 1; i <= blocks.length; i++) {
-						if (blocks[i - 1][0])
-							this.world.updateBlock(this.x + deltas[0] * i, this.y - 1, this.z + deltas[1] * i, blocks[i - 1][0]);
-						if (blocks[i - 1][1])
-							this.world.updateBlock(this.x + deltas[0] * i, this.y + 1, this.z + deltas[1] * i, blocks[i - 1][1]);
-						let leftDeltas = this.getDirectionDelta((this.d + 3) % 4);
-						let rightDeltas = this.getDirectionDelta((this.d + 1) % 4);
-						if (blocks[i - 1][2])
-							this.world.updateBlock(this.x + deltas[0] * i + leftDeltas[0], this.y, this.z + deltas[1] * i + leftDeltas[1], blocks[i - 1][2]);
-						if (blocks[i - 1][3])
-							this.world.updateBlock(this.x + deltas[0] * i + rightDeltas[0], this.y, this.z + deltas[1] * i + rightDeltas[1], blocks[i - 1][3]);
+		const listener = async (resp: string) => {
+			try {
+				let res = JSON.parse(resp);
+				if (res.nonce === nonce) {
+					if (res.data === 'end') {
+						await this.updateInventory();
+						await this.updateBlock();
+						this.fuel = await this.exec<number>('turtle.getFuelLevel()');
+						this.ws.off('message', listener);
+						return;
+					} else {
+						if (res.move) {
+							let clearBlock = false;
+							if (res.move === 'l') {
+								this.d += 3;
+								this.d %= 4;
+							} else if (res.move === 'r') {
+								this.d += 1;
+								this.d %= 4;
+							} else if (res.move === 'f') {
+								let deltas = this.getDirectionDelta(this.d);
+								this.x += deltas[0];
+								this.z += deltas[1];
+								clearBlock = true;
+							} else if (res.move === 'u') {
+								this.y++;
+								clearBlock = true;
+							} else if (res.move === 'd') {
+								this.y--;
+								clearBlock = true;
+							}
+							if (clearBlock) {
+								this.world.updateBlock(this.x, this.y, this.z, 'No block to inspect');
+							}
+							this.world.updateTurtle(this, this.x, this.y, this.z, this.d);
+						}
+						if (res.blocks) {
+							if (direction === 'forward') {
+								if (res.blocks[0])
+									this.world.updateBlock(this.x, this.y - 1, this.z, res.blocks[0]);
+								if (res.blocks[1])
+									this.world.updateBlock(this.x, this.y + 1, this.z, res.blocks[1]);
+								let leftDeltas = this.getDirectionDelta((this.d + 3) % 4);
+								let rightDeltas = this.getDirectionDelta((this.d + 1) % 4);
+								if (res.blocks[2])
+									this.world.updateBlock(this.x + leftDeltas[0], this.y, this.z + leftDeltas[1], res.blocks[2]);
+								if (res.blocks[3])
+									this.world.updateBlock(this.x + rightDeltas[0], this.y, this.z + rightDeltas[1], res.blocks[3]);
+							} else {
+								let forwardDeltas = this.getDirectionDelta(this.d);
+								let leftDeltas = this.getDirectionDelta((this.d + 3) % 4);
+								let rightDeltas = this.getDirectionDelta((this.d + 1) % 4);
+								if (res.blocks[0])
+									this.world.updateBlock(this.x + leftDeltas[0], this.y, this.z + leftDeltas[1], res.blocks[0]);
+								if (res.blocks[1])
+									this.world.updateBlock(this.x - forwardDeltas[0], this.y, this.z - forwardDeltas[1], res.blocks[1]);
+								if (res.blocks[2])
+									this.world.updateBlock(this.x + rightDeltas[0], this.y, this.z + rightDeltas[1], res.blocks[2]);
+								if (res.blocks[3])
+									this.world.updateBlock(this.x + forwardDeltas[0], this.y, this.z + forwardDeltas[1], res.blocks[3]);
+							}
+						}
+						this.emit('update');
 					}
-					this.x += deltas[0] * blocks.length;
-					this.z += deltas[1] * blocks.length;
-					this.d += orientation;
-					this.world.updateTurtle(this, this.x, this.y, this.z, this.d);
-					await this.updateInventory();
-					await this.updateFuel();
-					await this.updateBlock();
-					resolvePromise(parsed);
 				}
-				resolvePromise(null);
-			});
-		});
+			} catch (e) { }
+		}
+
+		this.ws.on('message', listener);
 	}
+
 	async disconnect() {
 		this.ws.close();
 	}
