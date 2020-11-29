@@ -45,6 +45,11 @@
 ✓ Temporary autonomity
 ✓ Add name to code, and make a UI
 
+# HOW TO USE TEXTURES
+1. Extract frontend/public/texture.zip
+2. this should extract as /frontend/public/textures/minecraft/(all textures in here)
+3. Profit
+
 # INSTRUCTIONS FOR LUDWIG
  1. Materials:
 	- Turtle
