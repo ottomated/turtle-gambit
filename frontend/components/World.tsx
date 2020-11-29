@@ -286,7 +286,7 @@ function Box(props: MeshProps & { color: string, name: string, transparent: bool
 
 	if(textureName[0]==='minecraft')
 	{
-		const texture = new THREE.TextureLoader().load('textures/minecraft/'+textureName[1]+'.png');
+		const texture = new THREE.TextureLoader().load('textures/'+textureName[0]+'/'+textureName[1]+'.png');
 		texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     //texture.repeat.set(22, 22);
 		//texture.magFilter = 16;
