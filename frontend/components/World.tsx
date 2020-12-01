@@ -3,6 +3,7 @@ import { useRef, useState, useMemo, useEffect, Suspense, HTMLProps, RefObject, S
 import { Mesh, BoxBufferGeometry, Vector3, Quaternion, Euler, Raycaster, Vector2, Object3D } from 'three';
 import { OrbitControls } from 'three-orbitcontrols-ts';
 // import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import * as THREE from 'three';
 import { Turtle, TurtleContext, World } from '../pages';
 import useEventListener from '@use-it/event-listener';
 import Color from 'color';
@@ -279,20 +280,51 @@ function Box(props: MeshProps & { color: string, name: string, transparent: bool
 
 	const geom = useMemo(() => new BoxBufferGeometry(1, 1, 1), []);
 
-	return (
-		<>
-			<mesh
-				{...props}
-				ref={mesh}
-				scale={[1, 1, 1]}
-			>
-				<boxBufferGeometry args={[1, 1, 1]} />
-				<meshBasicMaterial color={props.color} transparent={props.transparent} opacity={props.transparent ? 0.5 : 1} />
-			</mesh>
-			<lineSegments scale={[1, 1, 1]} position={props.position}>
-				<edgesGeometry args={[geom]} />
-				<lineBasicMaterial color="black" attach="material" />
-			</lineSegments>
-		</>
-	)
+	//const TextureLoader = require('three/src/loaders/TextureLoader').TextureLoader;
+	//const THREE = require('three')
+	var textureName = props.name.split(':');
+
+	if(textureName[0]==='minecraft')
+	{
+		const texture = new THREE.TextureLoader().load('textures/'+textureName[0]+'/'+textureName[1]+'.png');
+		texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    //texture.repeat.set(22, 22);
+		//texture.magFilter = 16;
+    //texture.anisotropy = 16;
+	  return (
+	    <>
+	      <mesh
+	        {...props}
+	        ref={mesh}
+	        scale={[1, 1, 1]}
+	      >
+	        <boxBufferGeometry args={[1, 1, 1]} />
+	        <meshBasicMaterial color={props.color} transparent={props.transparent} opacity={props.transparent ? 0.5 : 1} />
+					<meshPhongMaterial attach="material" map={texture} />
+	      </mesh>
+	      <lineSegments scale={[1, 1, 1]} position={props.position}>
+	        <edgesGeometry args={[geom]} />
+	        <lineBasicMaterial color="black" attach="material" />
+	      </lineSegments>
+	    </>
+	  )
+	}
+	else
+	{		return (
+			<>
+				<mesh
+					{...props}
+					ref={mesh}
+					scale={[1, 1, 1]}
+				>
+					<boxBufferGeometry args={[1, 1, 1]} />
+					<meshBasicMaterial color={props.color} transparent={props.transparent} opacity={props.transparent ? 0.5 : 1} />
+				</mesh>
+				<lineSegments scale={[1, 1, 1]} position={props.position}>
+					<edgesGeometry args={[geom]} />
+					<lineBasicMaterial color="black" attach="material" />
+				</lineSegments>
+			</>
+		)
+	}
 }

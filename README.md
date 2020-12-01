@@ -45,6 +45,13 @@
 ✓ Temporary autonomity
 ✓ Add name to code, and make a UI
 
+# HOW TO USE TEXTURES
+1. Go to your minecraft install location
+2. go to versions then 1.12.2 and open the .jre and an archive
+3. navigate to assets/minecraft/textures/blocks
+4. copy everything to a folder called textures in /forntend/public
+This process will become easer this was just a Temporary issue.
+
 # INSTRUCTIONS FOR LUDWIG
  1. Materials:
 	- Turtle
