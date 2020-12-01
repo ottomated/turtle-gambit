@@ -1,12 +1,30 @@
 import { Canvas, MeshProps, extend, useFrame, useThree, ReactThreeFiber, useLoader } from 'react-three-fiber';
-import { useRef, useState, useMemo, useEffect, Suspense, HTMLProps, RefObject, SetStateAction, Dispatch, useContext } from 'react';
-import { Mesh, BoxBufferGeometry, Vector3, Quaternion, Euler, Raycaster, Vector2, Object3D } from 'three';
+import { lazy, useRef, useState, useMemo, useEffect, Suspense, HTMLProps, RefObject, SetStateAction, Dispatch, useContext } from 'react';
+import {
+	Mesh,
+	MeshBasicMaterial,
+	InstancedMesh,
+	EdgesGeometry,
+	BoxBufferGeometry,
+	Vector3,
+	Quaternion,
+	Euler,
+	Raycaster,
+	Vector2,
+	Object3D,
+	LineBasicMaterial,
+	BufferGeometry,
+	Float32BufferAttribute,
+	LineSegments
+} from 'three';
+import { Color as ThreeColor} from 'three';
 import { OrbitControls } from 'three-orbitcontrols-ts';
 // import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { Turtle, TurtleContext, World } from '../pages';
 import useEventListener from '@use-it/event-listener';
 import Color from 'color';
 import Tooltip from '@material-ui/core/Tooltip';
+import {use} from "ast-types";
 
 extend({ OrbitControls });
 declare global {
@@ -16,6 +34,20 @@ declare global {
 		}
 	}
 }
+
+interface BlockInstance {
+	position: [number, number, number];
+	color: string;
+	name: string;
+}
+
+interface BlockInstanceGroup {
+	blockInstances: BlockInstance[];
+	transparent: boolean;
+	renderUuid: string | null;
+}
+
+const Stats = lazy(() => import('./Stats'));
 
 export const hashCode = function (s: string): number {
 	return s.split("").reduce<number>(function (a, b) { a = ((a << 5) - a) + b.charCodeAt(0); return a & a }, 0);
@@ -102,8 +134,17 @@ function OtherTurtle({ obj, turtle, switchTurtle }: { obj: any, turtle: Turtle, 
 	</>;
 }
 
-function TooltipRaycaster({ mouse, setHovered }: { mouse: RefObject<{ x: number, y: number }>, setHovered: Dispatch<SetStateAction<string>> }) {
-	const { camera, scene, size } = useThree();
+function findBlockGroupByRenderId(blockGroups: Map<string, BlockInstanceGroup>, renderUuid: string): BlockInstanceGroup | null {
+	for (const g of blockGroups.values()) {
+		if (g.renderUuid === renderUuid) {
+			return g;
+		}
+	}
+	return null;
+}
+
+function TooltipRaycaster({ mouse, hovered, setHovered, blockGroups }: { mouse: RefObject<{ x: number, y: number }>, setHovered: Dispatch<SetStateAction<string>>, blockGroups: Map<string, BlockInstanceGroup> }) {
+	const {camera, scene, size} = useThree();
 	const ray = useRef<Raycaster>(null);
 
 	useFrame(() => {
@@ -114,19 +155,62 @@ function TooltipRaycaster({ mouse, setHovered }: { mouse: RefObject<{ x: number,
 
 		ray.current.setFromCamera(pos, camera);
 		var intersects = ray.current.intersectObjects(scene.children);
-		let object: Object3D | null = null;
+		let object: Object3D | BlockInstance | null = null;
 		for (let i = 0; i < intersects.length; i++) {
 			object = intersects[i].object;
+			if (intersects[i].instanceId && intersects[i].instanceId >= 0) {
+				const group = findBlockGroupByRenderId(blockGroups, object.uuid);
+				if (group && intersects[i].instanceId < group.blockInstances.length) {
+					object = group.blockInstances[intersects[i].instanceId];
+				}
+			}
 			if (object.name) break;
 		}
-		if (object) {
-			setHovered(object.name);
-		} else {
+		if (object && object.name) {
+			if (hovered !== object.name) {
+				setHovered(object.name); // This call is actually quite expensive
+			}
+		} else if (hovered !== '') {
 			setHovered('');
 		}
 	});
+	return (<raycaster ref={ray}/>);
+}
 
-	return <raycaster ref={ray} />;
+function groupBlockInstances(world: World, dontShowStone: boolean, showWholeWorld: boolean, turtle: Turtle | undefined, turtles: Turtle[]): Map<string, BlockInstanceGroup> {
+	const blockGroups = new Map<string, BlockInstanceGroup>();
+	Object.keys(world).map((k, i) => {
+		const positions = k.split(',').map(p => parseInt(p)) as [number, number, number];
+		const {name, metadata} = world[k];
+		if (dontShowStone && name === 'minecraft:stone') {
+			return null;
+		}
+		if (!showWholeWorld && turtle && (Math.pow(positions[0] - turtle.x, 2) + Math.pow(positions[1] - turtle.y, 2) + Math.pow(positions[2] - turtle.z, 2)) > 1000) {
+			return null;
+		}
+		const transparent = name.includes('water') || name.includes('lava') || !!turtles.find(t => {
+			let checkEqual = (t: Turtle, positions: number[], x: number, y: number, z: number) => t.x === positions[0] + x && t.y === positions[1] + y && t.z === positions[2] + z;
+			for (let x = -1; x <= 1; x++) {
+				for (let y = -1; y <= 1; y++) {
+					for (let z = -1; z <= 1; z++) {
+						if (checkEqual(t, positions, x, y, z)) return true;
+					}
+				}
+			}
+			return false;
+		});
+		const block = {
+			position: positions,
+			color: new ThreeColor(Color({h: hashCode(name + ':' + metadata) % 360, s: 60, l: 40}).toString()),
+			name: name + ':' + metadata
+		};
+		let groupKey = transparent.toString();
+		if (!blockGroups.has(groupKey)) {
+			blockGroups.set(groupKey, {blockInstances: [], transparent, renderUuid: null});
+		}
+		blockGroups.get(groupKey).blockInstances.push(block);
+	});
+	return blockGroups;
 }
 
 export default function WorldRenderer({ turtle, world, disableEvents, ...props }: { turtle?: Turtle, world: World, disableEvents: boolean } & HTMLProps<HTMLDivElement>) {
@@ -137,6 +221,7 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 	const [hovered, setHovered] = useState<string>('');
 	const [showWholeWorld, setShowWholeWorld] = useState<boolean>(false);
 	const [dontShowStone, setDontShowStone] = useState<boolean>(false);
+	const [showFPS, setShowFPS] = useState<boolean>(false);
 
 	const disableEventsRef = useRef<boolean>(disableEvents);
 	useEffect(() => {
@@ -148,8 +233,18 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 	}, [turtle]);
 
 	useEventListener('keyup', (ev: KeyboardEvent) => {
-		if (disableEventsRef.current || !currentTurtleRef.current) return;
 		let moved = false;
+		if (ev.code === 'KeyV') {
+			moved = true;
+			setShowWholeWorld(w => !w);
+		} else if (ev.code === 'KeyB') {
+			moved = true;
+			setDontShowStone(w => !w);
+		} else if (ev.code === 'KeyF') {
+			moved = true;
+			setShowFPS(w => !w);
+		}
+		if (disableEventsRef.current || !currentTurtleRef.current) return;
 		if (ev.code === 'KeyW') {
 			moved = true;
 			currentTurtleRef.current.forward();
@@ -168,18 +263,14 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 		} else if (ev.code === 'ShiftLeft') {
 			moved = true;
 			currentTurtleRef.current.down();
-		} else if (ev.code === 'KeyV') {
-			moved = true;
-			setShowWholeWorld(w => !w);
-		} else if (ev.code === 'KeyB') {
-			moved = true;
-			setDontShowStone(w => !w);
 		}
 		if (moved) {
 			ev.stopPropagation();
 			ev.preventDefault();
 		}
 	});
+
+	const blockGroups: Map<string, BlockInstanceGroup> = groupBlockInstances(world, dontShowStone, showWholeWorld, turtle, turtles);
 	return (
 		<Tooltip
 			title={hovered}
@@ -210,15 +301,23 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 				// 	console.log("Nothing");
 				// }
 				// console.log(ev.clientY);
-				position.current = { x: ev.clientX, y: ev.clientY - 100 };
+				const canvasYOffset = ev.target.getBoundingClientRect().top;
+				position.current = { x: ev.clientX, y: ev.clientY - canvasYOffset };
 				if (popperRef.current)
 					popperRef.current.update();
 			}}
 		>
 			<div {...props}>
 				<Canvas>
+					{
+						showFPS && (
+							<Suspense fallback={null}>
+								<Stats />
+							</Suspense>
+						)
+					}
 					<Controls target={turtle ? [turtle.x, turtle.y, turtle.z] : [0, 0, 0]} />
-					<TooltipRaycaster mouse={position} setHovered={setHovered} />
+					<TooltipRaycaster mouse={position} hovered={hovered} setHovered={setHovered} blockGroups={blockGroups} />
 					<ambientLight />
 					{
 						turtle &&
@@ -226,33 +325,15 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 							<Model name={turtle.label} url="/turtle.glb" position={[turtle.x, turtle.y, turtle.z]} rotation={[0, -(turtle.d + 2) * Math.PI / 2, 0]} />
 						</Suspense>
 					}
-					{Object.keys(world).map(k => {
-						let positions = k.split(',').map(p => parseInt(p)) as [number, number, number];
-						let { name, metadata } = world[k];
-						if (dontShowStone && name ==='minecraft:stone') {
-							return null;
+					<Suspense fallback={null}>
+						{
+							[...blockGroups.keys()].map(k => (
+								<Blocks group={blockGroups.get(k)} key={k}/>
+							))
 						}
-						if (!showWholeWorld && turtle && (Math.pow(positions[0] - turtle.x, 2) + Math.pow(positions[1] - turtle.y, 2) + Math.pow(positions[2] - turtle.z, 2)) > 1000) {
-							return null;
-						}
-						return <Box
-							transparent={name.includes('water') || name.includes('lava') || !!turtles.find(t => {
-								let checkEqual = (t: Turtle, positions: number[], x: number, y: number, z: number) => t.x === positions[0] + x && t.y === positions[1] + y && t.z === positions[2] + z;
-								for (let x = -1; x <= 1; x++) {
-									for (let y = -1; y <= 1; y++) {
-										for (let z = -1; z <= 1; z++) {
-											if (checkEqual(t, positions, x, y, z)) return true;
-										}
-									}
-								}
-								return false;
-							})}
-							key={k} position={positions} name={name + ':' + metadata} color={Color({
-								h: hashCode(name + ':' + metadata) % 360,
-								s: 60,
-								l: 40,
-							}).toString()} />
-					}).filter(b => b)}
+						<BlockLines groups={blockGroups.values()} />
+					</Suspense>
+
 					<Suspense fallback={null}>
 						<OtherTurtles switchTurtle={(turtle: Turtle) => {
 							setTurtleIndex(turtle.id);
@@ -263,36 +344,50 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 		</Tooltip>
 	)
 }
+const boxGeom = new BoxBufferGeometry(1, 1, 1);
+const boxEdgeGeom = new EdgesGeometry(boxGeom.scale(1.0000001, 1.0000001, 1.0000001));
 
-function Box(props: MeshProps & { color: string, name: string, transparent: boolean }) {
-	if (props.name.includes('computercraft:turtle_expanded')) return null;
-	// This reference will give us direct access to the mesh
-	const mesh = useRef<Mesh>()
-
-	// Set up state for the hovered and active state
-
-	// Rotate mesh every frame, this is outside of React without overhead
-	// useFrame(() => {
-	// 	if (mesh.current) mesh.current.rotation.x = mesh.current.rotation.y += 0.01
-	// 	if (lines.current) lines.current.rotation.x = lines.current.rotation.y += 0.01
-	// })
-
-	const geom = useMemo(() => new BoxBufferGeometry(1, 1, 1), []);
-
+function Blocks(props: { group: BlockInstanceGroup }) {
+	const instancedMesh = useRef<InstancedMesh>();
+	const mat = new MeshBasicMaterial({color: '#ffffff', transparent: props.group.transparent, opacity: props.group.transparent ? 0.5 : 1});
+	const blockTransform = new Object3D();
+	let set = false;
+	useFrame(() => {
+		if (set) {
+			return;
+		}
+		props.group.blockInstances.map((block, i) => {
+			blockTransform.position.set(...(block.position));
+			blockTransform.rotation.set(0, 0, 0);
+			blockTransform.updateMatrix();
+			instancedMesh.current.setMatrixAt(i, blockTransform.matrix);
+			block.color && instancedMesh.current.setColorAt(i, block.color);
+		});
+		instancedMesh.current.instanceMatrix.needsUpdate = true;
+		props.group.renderUuid = instancedMesh.current.uuid;
+		set = true;
+	});
 	return (
-		<>
-			<mesh
-				{...props}
-				ref={mesh}
-				scale={[1, 1, 1]}
-			>
-				<boxBufferGeometry args={[1, 1, 1]} />
-				<meshBasicMaterial color={props.color} transparent={props.transparent} opacity={props.transparent ? 0.5 : 1} />
-			</mesh>
-			<lineSegments scale={[1, 1, 1]} position={props.position}>
-				<edgesGeometry args={[geom]} />
-				<lineBasicMaterial color="black" attach="material" />
-			</lineSegments>
-		</>
-	)
+		<instancedMesh args={[boxGeom, mat, props.group.blockInstances.length]} ref={instancedMesh} />
+	);
+}
+
+function BlockLines(props: {groups: Iterable<BlockInstanceGroup>}) {
+	const geometry = new BufferGeometry();
+	const material = new LineBasicMaterial({ color: '#000000' });
+
+	const positions = [];
+	for (const group of props.groups) {
+		for (const block of group.blockInstances) {
+			const edgePositions = boxEdgeGeom.getAttribute('position');
+			edgePositions.array.forEach((v, i) => {
+				positions.push(v + block.position[i % 3]);
+			});
+		}
+	}
+
+	geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+	geometry.computeBoundingSphere();
+
+	return (<lineSegments geometry={geometry} material={material} />);
 }
