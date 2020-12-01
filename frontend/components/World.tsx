@@ -143,10 +143,9 @@ function findBlockGroupByRenderId(blockGroups: Map<string, BlockInstanceGroup>, 
 	return null;
 }
 
-function TooltipRaycaster({ mouse, setHovered, blockGroups }: { mouse: RefObject<{ x: number, y: number }>, setHovered: Dispatch<SetStateAction<string>>, blockGroups: Map<string, BlockInstanceGroup> }) {
-	const { camera, scene, size } = useThree();
+function TooltipRaycaster({ mouse, hovered, setHovered, blockGroups }: { mouse: RefObject<{ x: number, y: number }>, setHovered: Dispatch<SetStateAction<string>>, blockGroups: Map<string, BlockInstanceGroup> }) {
+	const {camera, scene, size} = useThree();
 	const ray = useRef<Raycaster>(null);
-	// const rayLine = useRef<LineSegments>(null);
 
 	useFrame(() => {
 		if (!ray.current || !mouse.current) return;
@@ -167,26 +166,15 @@ function TooltipRaycaster({ mouse, setHovered, blockGroups }: { mouse: RefObject
 			}
 			if (object.name) break;
 		}
-		if (object) {
-			setHovered(object.name);
-		} else {
+		if (object && object.name) {
+			if (hovered !== object.name) {
+				setHovered(object.name); // This call is actually quite expensive
+			}
+		} else if (hovered !== '') {
 			setHovered('');
 		}
 	});
-	// const geometry = new BufferGeometry();
-	// const material = new LineBasicMaterial({color: 0x0000ff});
-	// useFrame(() => {
-	// 	const points = [];
-	// 	points.push(ray.current.ray.origin);
-	// 	points.push(new Vector3().copy(ray.current.ray.origin).add(ray.current.ray.direction.multiplyScalar(ray.current.ray.far)));
-	// 	geometry.setFromPoints(points);
-	// });
-	return (
-		<>
-			<raycaster ref={ray} />
-			{/*<lineSegments ref={rayLine} args={[geometry, material]} />*/}
-		</>
-	);
+	return (<raycaster ref={ray}/>);
 }
 
 function groupBlockInstances(world: World, dontShowStone: boolean, showWholeWorld: boolean, turtle: Turtle | undefined, turtles: Turtle[]): Map<string, BlockInstanceGroup> {
@@ -313,7 +301,8 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 				// 	console.log("Nothing");
 				// }
 				// console.log(ev.clientY);
-				position.current = { x: ev.clientX, y: ev.clientY - 100 };
+				const canvasYOffset = ev.target.getBoundingClientRect().top;
+				position.current = { x: ev.clientX, y: ev.clientY - canvasYOffset };
 				if (popperRef.current)
 					popperRef.current.update();
 			}}
@@ -328,7 +317,7 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 						)
 					}
 					<Controls target={turtle ? [turtle.x, turtle.y, turtle.z] : [0, 0, 0]} />
-					<TooltipRaycaster mouse={position} setHovered={setHovered} blockGroups={blockGroups} />
+					<TooltipRaycaster mouse={position} hovered={hovered} setHovered={setHovered} blockGroups={blockGroups} />
 					<ambientLight />
 					{
 						turtle &&
@@ -356,11 +345,11 @@ export default function WorldRenderer({ turtle, world, disableEvents, ...props }
 	)
 }
 const boxGeom = new BoxBufferGeometry(1, 1, 1);
-const boxEdgeGeom = new EdgesGeometry(boxGeom).toNonIndexed();
+const boxEdgeGeom = new EdgesGeometry(boxGeom.scale(1.0000001, 1.0000001, 1.0000001));
 
 function Blocks(props: { group: BlockInstanceGroup }) {
 	const instancedMesh = useRef<InstancedMesh>();
-	const mat = new MeshBasicMaterial({color: Color({h: 0, s: 60, l: 40, }), transparent: props.group.transparent, opacity: props.group.transparent ? 0.5 : 1});
+	const mat = new MeshBasicMaterial({color: '#ffffff', transparent: props.group.transparent, opacity: props.group.transparent ? 0.5 : 1});
 	const blockTransform = new Object3D();
 	let set = false;
 	useFrame(() => {
@@ -400,5 +389,5 @@ function BlockLines(props: {groups: Iterable<BlockInstanceGroup>}) {
 	geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
 	geometry.computeBoundingSphere();
 
-	return (<lineSegments geometry={geometry} material={material} />)
+	return (<lineSegments geometry={geometry} material={material} />);
 }
